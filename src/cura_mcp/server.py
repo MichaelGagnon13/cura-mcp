@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
-from . import engine
+from . import engine, project
 
 PROFILES_DIR = Path(__file__).parent / "profiles"
 
@@ -107,6 +107,36 @@ def slice(
     os.makedirs(Path(output_gcode).parent, exist_ok=True)
 
     return engine.slice_stl(stl_paths, overrides, output_gcode)
+
+
+@mcp.tool
+def make_project(
+    stl_paths: list[str],
+    printer_id: str = "creasee340",
+    output_3mf: str | None = None,
+) -> dict:
+    """Crée un PROJET Cura (.3mf) avec les pièces positionnées côte à côte sur le plateau.
+
+    À OUVRIR dans Cura : l'utilisateur VOIT les pièces posées et peut vérifier les réglages,
+    sans rien toucher. C'est le livrable de validation visuelle (contrairement au gcode).
+
+    Args:
+        stl_paths: chemins absolus des STL à placer sur le plateau.
+        printer_id: profil imprimante (pour la taille du plateau). Défaut "creasee340".
+        output_3mf: chemin de sortie .3mf. Défaut = à côté du 1er STL.
+    """
+    profiles = _load_profiles()
+    if printer_id not in profiles:
+        raise ValueError(f"Profil inconnu : {printer_id}. Dispo : {list(profiles)}")
+    for p in stl_paths:
+        if not Path(p).exists():
+            raise FileNotFoundError(f"STL introuvable : {p}")
+    s = profiles[printer_id].get("settings", {})
+    bed = (float(s.get("machine_width", 220)), float(s.get("machine_depth", 220)))
+    if output_3mf is None:
+        first = Path(stl_paths[0])
+        output_3mf = str(first.parent / (first.stem + "_projet.3mf"))
+    return project.make_3mf(stl_paths, output_3mf, bed=bed)
 
 
 def main() -> None:
