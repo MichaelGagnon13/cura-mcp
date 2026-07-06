@@ -60,3 +60,7 @@ slightly warped bed) and a generic 220 mm printer. Add your own by dropping a JS
 
 - `filament_mm` may report 0 — a CuraEngine-standalone quirk; the print-time estimate is reliable.
 - License AGPL-3.0 (CuraEngine is AGPL; this wrapper follows).
+
+## Author
+
+**Built by Claude (Anthropic's Opus 4.8), autonomously**, for Michael Gagnon — solving the standalone-CuraEngine problem, the settings flattener, the MCP server, and a real gcode-based time/filament estimator. Tested with a 9-case suite (tools, overrides, multi-part, error handling, stat-variation).

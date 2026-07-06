@@ -91,19 +91,77 @@ def slice_stl(stl_paths: list[str], overrides: dict, out_gcode: str) -> dict:
         tail = (proc.stderr or proc.stdout)[-800:]
         raise RuntimeError(f"Découpe échouée. Fin du log :\n{tail}")
 
-    txt = Path(out_gcode).read_text(errors="ignore")[:4000]
-    time_s = 0.0
-    m = re.search(r";TIME:(\d+)", txt)
-    if m:
-        time_s = float(m.group(1))
-    fil_mm = 0.0
-    m = re.search(r";Filament used:\s*([\d.]+)m", txt)
-    if m:
-        fil_mm = float(m.group(1)) * 1000
+    stats = analyze_gcode(out_gcode)
+    stats["gcode"] = str(out_gcode)
+    stats["size_bytes"] = Path(out_gcode).stat().st_size
+    return stats
+
+
+def analyze_gcode(path: str) -> dict:
+    """Calcule le VRAI temps + filament en simulant les mouvements du gcode.
+
+    CuraEngine standalone n'écrit pas de stats fiables (;TIME est constant) — on les
+    calcule nous-mêmes : temps = somme(distance/vitesse), filament = somme(extrusion E).
+    Gère E relatif (M83, défaut Cura) et absolu (M82).
+    """
+    x = y = z = e = 0.0
+    feed = 1800.0  # mm/min
+    e_abs = False   # M83 relatif par défaut chez Cura
+    e_total = 0.0
+    t_total = 0.0
+    for line in Path(path).read_text(errors="ignore").splitlines():
+        line = line.split(";", 1)[0].strip()
+        if not line:
+            continue
+        code = line.split()[0]
+        if code == "M82":
+            e_abs = True
+            continue
+        if code == "M83":
+            e_abs = False
+            continue
+        if code == "G92":
+            for tok in line.split()[1:]:
+                if tok[:1] == "E":
+                    try:
+                        e = float(tok[1:])
+                    except ValueError:
+                        pass
+            continue
+        if code not in ("G0", "G1"):
+            continue
+        nx, ny, nz, ne = x, y, z, None
+        for tok in line.split()[1:]:
+            axis, val = tok[:1], tok[1:]
+            try:
+                f = float(val)
+            except ValueError:
+                continue
+            if axis == "X":
+                nx = f
+            elif axis == "Y":
+                ny = f
+            elif axis == "Z":
+                nz = f
+            elif axis == "E":
+                ne = f
+            elif axis == "F":
+                feed = f
+        dist = ((nx - x) ** 2 + (ny - y) ** 2 + (nz - z) ** 2) ** 0.5
+        if feed > 0:
+            t_total += dist / (feed / 60.0)
+        if ne is not None:
+            if e_abs:
+                de = ne - e
+                e = ne
+            else:
+                de = ne
+            if de > 0:
+                e_total += de
+        x, y, z = nx, ny, nz
     return {
-        "gcode": str(out_gcode),
-        "time_s": time_s,
-        "time_h": round(time_s / 3600, 2),
-        "filament_mm": round(fil_mm, 1),
-        "size_bytes": Path(out_gcode).stat().st_size,
+        "time_s": round(t_total, 1),
+        "time_h": round(t_total / 3600, 2),
+        "filament_mm": round(e_total, 1),
+        "filament_cm3": round(e_total * 3.14159 * (1.75 / 2) ** 2 / 1000, 2),
     }

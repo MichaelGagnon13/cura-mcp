@@ -5,7 +5,7 @@ description = "MCP server to slice 3D models with UltiMaker Cura (CuraEngine) he
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0" }
-authors = [{ name = "Michael & Claude" }]
+authors = [{ name = "Claude Opus 4.8 for Michael Gagnon" }]
 keywords = ["mcp", "cura", "3d-printing", "slicer", "curaengine"]
 dependencies = ["fastmcp>=3.0"]
 
