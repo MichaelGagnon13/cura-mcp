@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
-from . import engine, project
+from . import engine, project, bridge
 
 PROFILES_DIR = Path(__file__).parent / "profiles"
 
@@ -137,6 +137,74 @@ def make_project(
         first = Path(stl_paths[0])
         output_3mf = str(first.parent / (first.stem + "_projet.3mf"))
     return project.make_3mf(stl_paths, output_3mf, bed=bed)
+
+
+# ================= OUTILS FRONTEND (pilotent Cura EN DIRECT via le plugin MCPBridge) =================
+# Nécessitent Cura OUVERT avec le plugin MCPBridge. L'utilisateur VOIT tout se passer.
+
+@mcp.tool
+def cura_status() -> dict:
+    """Vérifie si Cura est ouvert et pilotable en direct (plugin MCPBridge). Retourne version + imprimante active."""
+    return bridge.send("ping")
+
+
+@mcp.tool
+def cura_load(stl_paths: list[str], clear_first: bool = True) -> dict:
+    """Charge des modèles (STL/3MF) DANS la fenêtre Cura ouverte — l'utilisateur les voit apparaître.
+
+    Args:
+        stl_paths: chemins absolus à charger sur le plateau.
+        clear_first: vider le plateau avant (défaut True).
+    """
+    if clear_first:
+        bridge.send("clear")
+    r = bridge.send("load", paths=stl_paths)
+    bridge.send("arrange")
+    return r
+
+
+@mcp.tool
+def cura_set(settings: dict) -> dict:
+    """Applique des réglages Cura EN DIRECT (visibles dans le panneau de l'utilisateur).
+
+    Args:
+        settings: ex. {"layer_height":0.16,"wall_line_count":4,"infill_sparse_density":22,
+                  "material_print_temperature":205,"adhesion_type":"brim"}.
+    """
+    return bridge.send("set", settings=settings)
+
+
+@mcp.tool
+def cura_get(keys: list[str]) -> dict:
+    """Lit les valeurs actuelles de réglages dans Cura (pour vérifier avec l'utilisateur)."""
+    return bridge.send("get", keys=keys)
+
+
+@mcp.tool
+def cura_slice() -> dict:
+    """Lance la découpe DANS Cura (l'utilisateur voit l'aperçu se calculer)."""
+    return bridge.send("slice")
+
+
+@mcp.tool
+def cura_print_time() -> dict:
+    """Retourne le temps d'impression estimé + matière, après une découpe dans Cura."""
+    return bridge.send("time")
+
+
+@mcp.tool
+def cura_screenshot(path: str = "/tmp/cura_view.png", width: int = 700, height: int = 700) -> dict:
+    """Capture le viewport de Cura (image isométrique) — pour VOIR l'état et le montrer à l'utilisateur.
+
+    Retourne le chemin de l'image PNG écrite (à lire ensuite).
+    """
+    return bridge.send("screenshot", path=path, width=width, height=height)
+
+
+@mcp.tool
+def cura_arrange() -> dict:
+    """Ré-arrange automatiquement les pièces sur le plateau (sans chevauchement)."""
+    return bridge.send("arrange")
 
 
 def main() -> None:

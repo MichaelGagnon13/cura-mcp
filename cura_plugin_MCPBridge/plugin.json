@@ -1,0 +1,8 @@
+{
+    "name": "MCP Bridge",
+    "author": "Claude Opus 4.8 for Michael Gagnon",
+    "version": "0.1.0",
+    "api": 8,
+    "supported_sdk_versions": ["8.0.0"],
+    "description": "Bridge socket pour piloter Cura en direct depuis un serveur MCP."
+}
