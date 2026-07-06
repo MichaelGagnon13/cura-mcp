@@ -181,9 +181,33 @@ def cura_get(keys: list[str]) -> dict:
 
 
 @mcp.tool
-def cura_slice() -> dict:
-    """Lance la découpe DANS Cura (l'utilisateur voit l'aperçu se calculer)."""
-    return bridge.send("slice")
+def cura_slice(wait: bool = True, timeout_s: int = 240) -> dict:
+    """Lance la découpe DANS Cura et ATTEND la fin (temps + matière fiables).
+
+    Args:
+        wait: si True (défaut), attend que la découpe soit terminée et retourne le temps/matière.
+        timeout_s: attente max en secondes.
+    """
+    import time
+    bridge.send("slice")
+    if not wait:
+        return {"slicing": True}
+    deadline = time.time() + timeout_s
+    stable = None
+    stable_count = 0
+    while time.time() < deadline:
+        time.sleep(3)
+        t = bridge.send("time")
+        pt = t.get("print_time")
+        if pt and pt != "00:00:00":
+            if pt == stable:
+                stable_count += 1
+                if stable_count >= 2:  # 2 lectures identiques = découpe stabilisée
+                    return {"done": True, **t}
+            else:
+                stable = pt
+                stable_count = 0
+    return {"done": False, "note": "timeout — découpe pas terminée à temps", "last": stable}
 
 
 @mcp.tool

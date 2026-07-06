@@ -24,6 +24,11 @@ class MCPBridge(Extension):
         super().__init__()
         self.setMenuName("MCP Bridge")
         self.addMenuItem("Statut du pont", self._status_popup)
+        self._last_slice = {"print_time": None, "material_grams": [], "material_meters": []}
+        try:
+            Application.getInstance().engineCreatedSignal.connect(self._connect_backend)
+        except Exception as e:
+            Logger.log("w", "MCPBridge: engineCreatedSignal indispo: %s" % e)
         self._server_thread = threading.Thread(target=self._serve, daemon=True)
         self._server_thread.start()
         Logger.log("i", "MCPBridge: socket démarré sur %s:%d" % (HOST, PORT))
@@ -31,6 +36,33 @@ class MCPBridge(Extension):
     # ---- statut menu ----
     def _status_popup(self):
         Logger.log("i", "MCPBridge actif sur %s:%d" % (HOST, PORT))
+
+    # ---- cache événementiel du temps de découpe (signal fiable) ----
+    def _connect_backend(self):
+        try:
+            backend = Application.getInstance().getBackend()
+            backend.printDurationMessage.connect(self._on_duration)
+            Logger.log("i", "MCPBridge: connecté à printDurationMessage")
+        except Exception as e:
+            Logger.log("w", "MCPBridge: connexion backend échouée: %s" % e)
+
+    def _on_duration(self, build_plate, print_time, material_amounts):
+        # print_time = dict feature -> Duration ; material_amounts = liste de longueurs (mm)
+        try:
+            from UM.Qt.Duration import Duration, DurationFormat
+            total = 0
+            for dur in (print_time or {}).values():
+                try:
+                    total += dur.getDisplaySeconds() if hasattr(dur, "getDisplaySeconds") else 0
+                except Exception:
+                    pass
+            hh = int(total // 3600); mm = int((total % 3600) // 60); ss = int(total % 60)
+            meters = [round(m / 1000.0, 2) for m in (material_amounts or [])]
+            grams = [round(m / 1000.0 * 1.24 * 3.14159 * (1.75 / 2) ** 2, 1) for m in (material_amounts or [])]
+            self._last_slice = {"print_time": "%02d:%02d:%02d" % (hh, mm, ss),
+                                "material_grams": grams, "material_meters": meters}
+        except Exception as e:
+            Logger.log("w", "MCPBridge _on_duration: %s" % e)
 
     # ---- serveur socket (thread) ----
     def _serve(self):
@@ -128,16 +160,27 @@ class MCPBridge(Extension):
         Application.getInstance().deleteAll()
         return {"cleared": True}
 
+    def _extruder(self, gs):
+        try:
+            lst = gs.extruderList
+        except Exception:
+            lst = list(gs.extruders.values()) if getattr(gs, "extruders", None) else []
+        return lst[0] if lst else None
+
     def _cmd_set(self, args):
-        # args: {"settings": {"layer_height":0.16, ...}}  -> écrit dans la pile globale (visible dans le GUI)
+        # Écrit chaque réglage sur la BONNE pile : extrudeur si settable_per_extruder (infill, parois,
+        # vitesse, temp...), sinon pile globale (machine). Sinon la découpe ignore les valeurs.
         app = Application.getInstance()
         gs = app.getGlobalContainerStack()
         if gs is None:
             raise RuntimeError("aucune imprimante active")
+        ext = self._extruder(gs)
         applied = {}
         for k, v in (args.get("settings", {}) or {}).items():
-            gs.setProperty(k, "value", v)
-            applied[k] = gs.getProperty(k, "value")
+            per_ext = gs.getProperty(k, "settable_per_extruder")
+            target = ext if (per_ext and ext is not None) else gs
+            target.setProperty(k, "value", v)
+            applied[k] = target.getProperty(k, "value")
         return {"applied": applied}
 
     def _cmd_get(self, args):
@@ -145,7 +188,12 @@ class MCPBridge(Extension):
         gs = app.getGlobalContainerStack()
         if gs is None:
             raise RuntimeError("aucune imprimante active")
-        return {k: gs.getProperty(k, "value") for k in args.get("keys", [])}
+        ext = self._extruder(gs)
+        out = {}
+        for k in args.get("keys", []):
+            src = ext if (gs.getProperty(k, "settable_per_extruder") and ext is not None) else gs
+            out[k] = src.getProperty(k, "value")
+        return out
 
     def _cmd_screenshot(self, args):
         from cura.Snapshot import Snapshot
@@ -181,14 +229,16 @@ class MCPBridge(Extension):
         return {"slicing": True}
 
     def _cmd_time(self, args):
+        # Priorité au cache événementiel (signal printDurationMessage), fiable.
+        if self._last_slice.get("print_time") and self._last_slice["print_time"] != "00:00:00":
+            return self._last_slice
         from UM.Qt.Duration import DurationFormat
         app = Application.getInstance()
         pi = app.getPrintInformation()
-        dur = pi.currentPrintTime
         try:
-            txt = dur.getDisplayString(DurationFormat.Format.ISO8601)
+            txt = pi.currentPrintTime.getDisplayString(DurationFormat.Format.ISO8601)
         except Exception:
-            txt = str(dur)
+            txt = "00:00:00"
         return {"print_time": txt,
                 "material_grams": [round(w, 1) for w in (getattr(pi, "materialWeights", []) or [])],
                 "material_meters": [round(l, 2) for l in (getattr(pi, "materialLengths", []) or [])]}
