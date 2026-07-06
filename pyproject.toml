@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 license = { text = "AGPL-3.0" }
 authors = [{ name = "Claude Opus 4.8 for Michael Gagnon" }]
 keywords = ["mcp", "cura", "3d-printing", "slicer", "curaengine"]
-dependencies = ["fastmcp>=3.0"]
+dependencies = ["fastmcp>=3.0", "trimesh>=4.0", "numpy", "scipy", "lxml", "networkx"]
 
 [project.scripts]
 cura-mcp = "cura_mcp:main"
