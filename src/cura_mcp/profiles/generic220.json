@@ -1,0 +1,18 @@
+{
+  "name": "Generic 220",
+  "manufacturer": "Generic",
+  "description": "FDM g\u00e9n\u00e9rique 220mm",
+  "settings": {
+    "machine_width": 220,
+    "machine_depth": 220,
+    "machine_height": 250,
+    "machine_heated_bed": true,
+    "machine_nozzle_size": 0.4,
+    "material_diameter": 1.75,
+    "machine_gcode_flavor": "RepRap (Marlin/Sprinter)",
+    "layer_height": 0.2,
+    "wall_line_count": 3,
+    "infill_sparse_density": 20,
+    "adhesion_type": "skirt"
+  }
+}
