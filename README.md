@@ -58,7 +58,7 @@ slightly warped bed) and a generic 220 mm printer. Add your own by dropping a JS
 
 ## Notes
 
-- `filament_mm` may report 0 — a CuraEngine-standalone quirk; the print-time estimate is reliable.
+- Print time and filament are computed from the actual toolpaths (analyze_gcode), so they vary with settings and model — reliable estimates.
 - License AGPL-3.0 (CuraEngine is AGPL; this wrapper follows).
 
 ## Author
